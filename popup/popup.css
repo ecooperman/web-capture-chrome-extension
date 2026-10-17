@@ -82,3 +82,11 @@ select {
   font-size: 12px;
   color: #6b7280;
 }
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  font-size: 13px;
+}

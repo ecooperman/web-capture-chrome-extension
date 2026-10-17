@@ -17,6 +17,11 @@
       <p class="hint">Reads every post currently shown on this saved collection page (scroll to the bottom first so they're all loaded) and asks Claude to pull out real places from each caption. Unlike the single-business clip, this <strong>does</strong> create plans directly in the Plans app - each links back to its source post, and posts already imported are skipped.</p>
       <label for="location-select" class="field-label">Location (optional)</label>
       <select id="location-select"><option value="">Loading locations…</option></select>
+      <label class="check-label">
+        <input type="checkbox" id="recheck-existing" />
+        Re-check posts already imported
+      </label>
+      <p class="hint">Re-reads their captions to fill in where each place actually is (e.g. a Boston spot in a Salem collection). Never adds duplicate plans.</p>
       <button id="import-btn">Import this collection</button>
     </div>
 

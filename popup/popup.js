@@ -320,10 +320,15 @@ document.getElementById("import-btn").addEventListener("click", async () => {
       body: JSON.stringify({
         posts,
         location_id: locationId && locationId !== NEW_LOCATION ? Number(locationId) : null,
+        recheck_existing: document.getElementById("recheck-existing").checked,
       }),
     });
     const notes = [];
-    if (summary.posts_already_imported) notes.push(`${summary.posts_already_imported} already imported`);
+    if (summary.posts_rechecked) {
+      notes.push(`${summary.posts_rechecked} already imported re-checked, ${summary.plans_updated} plan${summary.plans_updated === 1 ? "" : "s"} updated`);
+    } else if (summary.posts_already_imported) {
+      notes.push(`${summary.posts_already_imported} already imported`);
+    }
     if (summary.posts_skipped) notes.push(`${summary.posts_skipped} not a place`);
     setStatus(
       `Created ${summary.plans_created} plan${summary.plans_created === 1 ? "" : "s"} from ${summary.posts_processed} post${summary.posts_processed === 1 ? "" : "s"}` +

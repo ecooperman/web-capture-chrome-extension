@@ -82,3 +82,9 @@ references to anything outside the function itself, only nested helpers.
 Re-importing is safe: posts that already have plans are skipped before
 Claude is asked anything, so a collection can be re-imported as it grows
 and only the new posts cost anything.
+
+Claude also notes where each place actually is, when the caption says -
+so a Boston spot saved in a Salem collection gets flagged on the plans
+page. To fill that in for posts imported before this existed, tick "Re-check
+posts already imported" before importing: those posts' captions are re-read
+and their plans updated, without adding any duplicates.
