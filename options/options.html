@@ -2,18 +2,22 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Trip Clipper - Settings</title>
+    <title>Web Capture - Settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <h1>Trip Clipper</h1>
+    <h1>Web Capture</h1>
     <p class="hint">Stored only in this browser (<code>chrome.storage.local</code>).</p>
 
     <label>
-      Trip Planning app URL
+      Trip Planning app URL (single-business clips)
       <input id="app-url" type="url" placeholder="https://trips.evancooperman.com" />
     </label>
-    <p class="hint">Point this at your local dev server (e.g. <code>http://127.0.0.1:8060</code>) to test before deploying.</p>
+    <label>
+      Plans app URL (Instagram collection imports)
+      <input id="plans-url" type="url" placeholder="https://plans.evancooperman.com" />
+    </label>
+    <p class="hint">Point these at your local dev servers (e.g. <code>http://127.0.0.1:8060</code> and <code>http://127.0.0.1:8020</code>) to test before deploying.</p>
 
     <button id="save-btn">Save</button>
     <p id="status" class="status"></p>

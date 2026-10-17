@@ -1,13 +1,20 @@
-# Trip Clipper
+# Web Capture
 
-A small Chrome extension that sends the business you're currently looking
-at (a Yelp listing today, more sites can be added the same way later) to
-[trip-planning](../trip-planning) as a pre-filled activity - name, address,
-phone, and URL - instead of copy-pasting each field by hand.
+A small Chrome extension that captures what you're looking at into the
+personal-projects apps, reading the page you already have open rather than
+fetching anything server-side:
 
-It never saves anything on its own. It opens Trip Planning's "add activity"
-form with those fields filled in for you to review, edit, and save
-yourself.
+- **A single business** (a Yelp listing today, more sites can be added the
+  same way later) goes to [trip-planning](../../trip-planning) as a
+  pre-filled activity - name, address, phone, and URL - instead of
+  copy-pasting each field by hand. It never saves this on its own: it opens
+  Trip Planning's "add activity" form with those fields filled in for you
+  to review, edit, and save yourself.
+- **A whole saved Instagram collection** goes to the Plans app
+  ([social-planning](../../social-planning)) as plans, one per real place
+  Claude finds in each caption - see "Import an Instagram collection"
+  below. Trip Planning then pulls plans in as activities ("Import from
+  plans" on a trip page).
 
 ## Why this exists instead of server-side scraping
 
@@ -23,10 +30,12 @@ rather than server-side fetchers for sites that don't want to be scraped.
 1. Go to `chrome://extensions`
 2. Turn on "Developer mode" (top right)
 3. Click "Load unpacked" and select this folder
-4. Click the extension icon, then the "Trip Planning app URL" link to set
-   where it should open activities (defaults to
-   `https://trips.evancooperman.com`; point it at your local dev server,
-   e.g. `http://127.0.0.1:8060`, while testing)
+4. Click the extension icon, then the "App URLs" link to set where it
+   sends things (defaults to `https://trips.evancooperman.com` and
+   `https://plans.evancooperman.com`; point them at your local dev servers,
+   e.g. `http://127.0.0.1:8060` / `http://127.0.0.1:8020`, while testing)
+5. Be signed in to both apps through Cloudflare Access in this Chrome
+   profile - the extension's requests ride on that login.
 
 ## Use it
 
@@ -54,3 +63,22 @@ Add a `hostname -> extractor function` entry to `SITE_EXTRACTORS` in
 `popup/popup.js`. Each extractor runs isolated inside the target page (via
 `chrome.scripting.executeScript`), so it must be fully self-contained - no
 references to anything outside the function itself, only nested helpers.
+
+## Import an Instagram collection
+
+1. Open one of your saved collections
+   (`instagram.com/<you>/saved/<collection>/<id>/`) and scroll to the
+   bottom so every post has loaded - only posts already rendered on the
+   page are read (each post's caption is in its thumbnail's alt text).
+2. Click the extension icon. On a collection page it switches to collection
+   mode and preselects the Plans location whose name matches the
+   collection's (e.g. "salem" -> "Salem"); pick another, or "+ New
+   location…" to add one to the Plans app's managed list.
+3. Click "Import this collection". The Plans app asks Claude for the real
+   places in each caption (a "top 5 spots" post becomes five plans, a meme
+   becomes none) and creates one plan per place, its URL pointing back at
+   the source post.
+
+Re-importing is safe: posts that already have plans are skipped before
+Claude is asked anything, so a collection can be re-imported as it grows
+and only the new posts cost anything.

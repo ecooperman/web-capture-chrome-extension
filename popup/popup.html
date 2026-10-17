@@ -2,11 +2,11 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Trip Clipper</title>
+    <title>Web Capture</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>Trip Clipper</h1>
+    <h1>Web Capture</h1>
 
     <div id="single-post-section">
       <p class="hint">Sends this business to Trip Planning as a new activity, pre-filled with its name, address, phone, and URL. It never saves anything on its own - you review and click "Add activity" yourself.</p>
@@ -14,15 +14,15 @@
     </div>
 
     <div id="collection-section" class="hidden">
-      <p class="hint">Reads every post currently shown on this saved collection page and asks Claude to pull out real places from each caption - unlike the single-post clip above, this <strong>does</strong> create activities directly (unscheduled, notes link back to the source post) so you can review/edit them on Trip Planning afterward.</p>
-      <label for="trip-select" class="field-label">Add to trip (optional)</label>
-      <select id="trip-select"><option value="">Loading trips…</option></select>
+      <p class="hint">Reads every post currently shown on this saved collection page (scroll to the bottom first so they're all loaded) and asks Claude to pull out real places from each caption. Unlike the single-business clip, this <strong>does</strong> create plans directly in the Plans app - each links back to its source post, and posts already imported are skipped.</p>
+      <label for="location-select" class="field-label">Location (optional)</label>
+      <select id="location-select"><option value="">Loading locations…</option></select>
       <button id="import-btn">Import this collection</button>
     </div>
 
     <p id="status" class="status"></p>
 
-    <a href="#" id="options-link">Trip Planning app URL</a>
+    <a href="#" id="options-link">App URLs</a>
     <script src="popup.js"></script>
   </body>
 </html>

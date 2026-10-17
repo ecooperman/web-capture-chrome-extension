@@ -9,7 +9,11 @@
 // and runs isolated in the target page, so it must be fully self-contained
 // (no references to anything outside itself - nested helpers only).
 
+// Two destinations: a single business (Yelp etc.) goes to Trip Planning's
+// pre-filled "add activity" form; a whole saved Instagram collection goes
+// to the Plans app (social-planning), which trips later pulls from.
 const DEFAULT_APP_URL = "https://trips.evancooperman.com";
+const DEFAULT_PLANS_URL = "https://plans.evancooperman.com";
 
 function extractYelp() {
   function getMeta(prop) {
@@ -133,6 +137,11 @@ async function getAppUrl() {
   return appUrl.replace(/\/$/, "");
 }
 
+async function getPlansUrl() {
+  const { plansUrl } = await chrome.storage.local.get({ plansUrl: DEFAULT_PLANS_URL });
+  return plansUrl.replace(/\/$/, "");
+}
+
 document.getElementById("send-btn").addEventListener("click", async () => {
   const button = document.getElementById("send-btn");
   button.disabled = true;
@@ -185,26 +194,59 @@ async function ensureAppHostPermission(appUrl) {
   return chrome.permissions.request({ origins: [originPattern] });
 }
 
-async function loadTripOptions(appUrl) {
-  const select = document.getElementById("trip-select");
+const NEW_LOCATION = "__new__";
+
+// The collection's own slug (instagram.com/<user>/saved/<slug>/<id>/) is
+// usually the place it's about - "salem", "new-york" - so it's used to
+// preselect the matching Plans location, ignoring case and dashes.
+function collectionSlug(url) {
+  const match = new URL(url).pathname.match(/^\/[^/]+\/saved\/([^/]+)\//);
+  return match ? decodeURIComponent(match[1]).replace(/[-_]+/g, " ").trim().toLowerCase() : "";
+}
+
+async function loadLocationOptions(plansUrl, slug, selectId) {
+  const select = document.getElementById("location-select");
   try {
-    const granted = await ensureAppHostPermission(appUrl);
+    const granted = await ensureAppHostPermission(plansUrl);
     if (!granted) {
       select.innerHTML = '<option value="">Permission needed - click Import</option>';
       return;
     }
-    const trips = await fetch(`${appUrl}/api/trips`).then((r) => r.json());
-    select.innerHTML = '<option value="">Don\'t associate with a trip</option>';
-    for (const trip of trips) {
-      if (trip.archived) continue;
+    const locations = await fetch(`${plansUrl}/api/locations`).then((r) => r.json());
+    select.innerHTML = '<option value="">No location</option>';
+    for (const loc of locations) {
       const opt = document.createElement("option");
-      opt.value = String(trip.id);
-      opt.textContent = trip.location;
+      opt.value = String(loc.id);
+      opt.textContent = loc.name;
       select.appendChild(opt);
     }
+    const newOpt = document.createElement("option");
+    newOpt.value = NEW_LOCATION;
+    newOpt.textContent = "+ New location…";
+    select.appendChild(newOpt);
+
+    const match = locations.find((loc) => loc.name.trim().toLowerCase() === slug);
+    if (selectId) select.value = String(selectId);
+    else if (match) select.value = String(match.id);
   } catch (err) {
-    select.innerHTML = '<option value="">Couldn\'t load trips</option>';
+    select.innerHTML = '<option value="">Couldn\'t load locations</option>';
   }
+}
+
+// Locations are a managed list in the Plans app (picked, never typed per
+// plan) - creating one here goes through the same API as its Settings page,
+// so the uniqueness check (ignoring case) still applies.
+async function createLocation(plansUrl, slug) {
+  const name = prompt("New location name:", slug.replace(/\b\w/g, (c) => c.toUpperCase()));
+  if (!name || !name.trim()) return null;
+  const response = await fetch(`${plansUrl}/api/locations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+  return body;
 }
 
 async function initPopup() {
@@ -214,8 +256,22 @@ async function initPopup() {
   document.getElementById("single-post-section").classList.add("hidden");
   document.getElementById("collection-section").classList.remove("hidden");
 
-  const appUrl = await getAppUrl();
-  loadTripOptions(appUrl);
+  const plansUrl = await getPlansUrl();
+  const slug = collectionSlug(tab.url);
+  const select = document.getElementById("location-select");
+  loadLocationOptions(plansUrl, slug);
+
+  select.addEventListener("change", async () => {
+    if (select.value !== NEW_LOCATION) return;
+    try {
+      const created = await createLocation(plansUrl, slug);
+      await loadLocationOptions(plansUrl, slug, created && created.id);
+      if (created) setStatus(`Added location "${created.name}".`, false);
+    } catch (err) {
+      setStatus(`Couldn't add location: ${err.message}`, true);
+      await loadLocationOptions(plansUrl, slug);
+    }
+  });
 }
 
 document.getElementById("import-btn").addEventListener("click", async () => {
@@ -225,11 +281,11 @@ document.getElementById("import-btn").addEventListener("click", async () => {
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const appUrl = await getAppUrl();
+    const plansUrl = await getPlansUrl();
 
-    const granted = await ensureAppHostPermission(appUrl);
+    const granted = await ensureAppHostPermission(plansUrl);
     if (!granted) {
-      setStatus("Permission to reach the app was declined.", true);
+      setStatus("Permission to reach the Plans app was declined.", true);
       button.disabled = false;
       return;
     }
@@ -247,11 +303,14 @@ document.getElementById("import-btn").addEventListener("click", async () => {
 
     setStatus(`Asking Claude about ${posts.length} post${posts.length === 1 ? "" : "s"}…`, false);
 
-    const tripId = document.getElementById("trip-select").value;
-    const response = await fetch(`${appUrl}/api/instagram-import`, {
+    const locationId = document.getElementById("location-select").value;
+    const response = await fetch(`${plansUrl}/api/instagram-import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ posts, trip_id: tripId ? Number(tripId) : null }),
+      body: JSON.stringify({
+        posts,
+        location_id: locationId && locationId !== NEW_LOCATION ? Number(locationId) : null,
+      }),
     });
 
     if (!response.ok) {
@@ -260,9 +319,12 @@ document.getElementById("import-btn").addEventListener("click", async () => {
     }
 
     const summary = await response.json();
+    const notes = [];
+    if (summary.posts_already_imported) notes.push(`${summary.posts_already_imported} already imported`);
+    if (summary.posts_skipped) notes.push(`${summary.posts_skipped} not a place`);
     setStatus(
-      `Created ${summary.activities_created} activit${summary.activities_created === 1 ? "y" : "ies"} from ${summary.posts_processed} post${summary.posts_processed === 1 ? "" : "s"}` +
-        (summary.posts_skipped ? ` (${summary.posts_skipped} skipped - not a place).` : "."),
+      `Created ${summary.plans_created} plan${summary.plans_created === 1 ? "" : "s"} from ${summary.posts_processed} post${summary.posts_processed === 1 ? "" : "s"}` +
+        (notes.length ? ` (${notes.join(", ")}).` : "."),
       false
     );
   } catch (err) {

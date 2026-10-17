@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Trip Clipper",
-  "version": "0.2.0",
-  "description": "Sends the business you're looking at on Yelp to Trip Planning as a pre-filled activity, or imports a whole saved Instagram collection at once via Claude. Never submits a single-post clip without your review.",
+  "name": "Web Capture",
+  "version": "0.3.0",
+  "description": "Sends the business you're looking at on Yelp to Trip Planning as a pre-filled activity, or imports a whole saved Instagram collection into the Plans app via Claude. Never submits a single-business clip without your review.",
   "permissions": ["activeTab", "scripting", "storage"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
