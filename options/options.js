@@ -10,13 +10,27 @@ async function load() {
   document.getElementById("plans-url").value = plansUrl;
 }
 
-document.getElementById("save-btn").addEventListener("click", async () => {
+// Chrome only allows asking for a host permission during a click, so
+// Save is where access to non-default URLs (e.g. a local dev server) is
+// requested - the production apps are already granted in manifest.json.
+// The request has to be the first thing the handler does, before any
+// await, or Chrome no longer counts it as part of the click.
+document.getElementById("save-btn").addEventListener("click", () => {
   const appUrl = document.getElementById("app-url").value.trim() || DEFAULT_APP_URL;
   const plansUrl = document.getElementById("plans-url").value.trim() || DEFAULT_PLANS_URL;
-  await chrome.storage.local.set({ appUrl, plansUrl });
   const status = document.getElementById("status");
-  status.textContent = "Saved.";
-  setTimeout(() => (status.textContent = ""), 2000);
+  let origins;
+  try {
+    origins = [...new Set([appUrl, plansUrl].map((u) => `${new URL(u).origin}/*`))];
+  } catch (err) {
+    status.textContent = "One of those isn't a valid URL.";
+    return;
+  }
+  chrome.permissions.request({ origins }, async (granted) => {
+    await chrome.storage.local.set({ appUrl, plansUrl });
+    status.textContent = granted ? "Saved." : "Saved, but access was declined - the extension can't reach those URLs until you allow it.";
+    setTimeout(() => (status.textContent = ""), granted ? 2000 : 6000);
+  });
 });
 
 load();

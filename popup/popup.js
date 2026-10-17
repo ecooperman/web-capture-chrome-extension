@@ -182,16 +182,40 @@ function isInstagramCollectionPage(url) {
   return /^\/[^/]+\/saved\/[^/]+\/.+/.test(parsed.pathname);
 }
 
-// Extension fetches to the configured app are cross-origin from the
-// popup's own perspective - host_permissions (requested here, not baked
-// into the manifest, since the app URL is user-configurable in Options)
-// is what lets fetch() reach it regardless of the server's own CORS
-// headers, same mechanism content scripts use for the page they're on.
-async function ensureAppHostPermission(appUrl) {
-  const originPattern = `${new URL(appUrl).origin}/*`;
-  const already = await chrome.permissions.contains({ origins: [originPattern] });
-  if (already) return true;
-  return chrome.permissions.request({ origins: [originPattern] });
+// Extension fetches to the apps are cross-origin from the popup's own
+// perspective - a host permission for the app's origin is what lets fetch()
+// reach it regardless of the server's CORS headers. The production apps are
+// granted up front in manifest.json's host_permissions; any other URL set
+// in Options (e.g. a local dev server) is requested when Options is saved,
+// since Chrome only allows that request during a click - the popup itself
+// only ever checks, never asks.
+async function hasAppHostPermission(appUrl) {
+  return chrome.permissions.contains({ origins: [`${new URL(appUrl).origin}/*`] });
+}
+
+// fetch() for the apps' JSON APIs. credentials: "include" sends the
+// Cloudflare Access login cookie (an extension page is a different origin,
+// so fetch's default would leave it off), and redirect: "manual" turns
+// Access's redirect-to-login into a clear "sign in first" error rather than
+// a confusing CORS failure on the login page.
+async function appFetch(baseUrl, path, options = {}) {
+  const host = new URL(baseUrl).host;
+  if (!(await hasAppHostPermission(baseUrl))) {
+    throw new Error(`No access to ${host} - open App URLs and click Save to allow it.`);
+  }
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, { credentials: "include", redirect: "manual", ...options });
+  } catch (err) {
+    throw new Error(`Couldn't reach ${host} (${err.message}).`);
+  }
+  const signInError = new Error(`Not signed in to ${host} - open https://${host} in this browser, sign in, then try again.`);
+  if (response.type === "opaqueredirect" || response.status === 401 || response.status === 403) throw signInError;
+  const isJson = (response.headers.get("content-type") || "").includes("application/json");
+  if (!isJson) throw signInError; // Access's login page, not the app
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+  return body;
 }
 
 const NEW_LOCATION = "__new__";
@@ -207,12 +231,7 @@ function collectionSlug(url) {
 async function loadLocationOptions(plansUrl, slug, selectId) {
   const select = document.getElementById("location-select");
   try {
-    const granted = await ensureAppHostPermission(plansUrl);
-    if (!granted) {
-      select.innerHTML = '<option value="">Permission needed - click Import</option>';
-      return;
-    }
-    const locations = await fetch(`${plansUrl}/api/locations`).then((r) => r.json());
+    const locations = await appFetch(plansUrl, "/api/locations");
     select.innerHTML = '<option value="">No location</option>';
     for (const loc of locations) {
       const opt = document.createElement("option");
@@ -230,6 +249,7 @@ async function loadLocationOptions(plansUrl, slug, selectId) {
     else if (match) select.value = String(match.id);
   } catch (err) {
     select.innerHTML = '<option value="">Couldn\'t load locations</option>';
+    setStatus(err.message, true);
   }
 }
 
@@ -239,14 +259,11 @@ async function loadLocationOptions(plansUrl, slug, selectId) {
 async function createLocation(plansUrl, slug) {
   const name = prompt("New location name:", slug.replace(/\b\w/g, (c) => c.toUpperCase()));
   if (!name || !name.trim()) return null;
-  const response = await fetch(`${plansUrl}/api/locations`, {
+  return appFetch(plansUrl, "/api/locations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: name.trim() }),
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
-  return body;
 }
 
 async function initPopup() {
@@ -283,13 +300,6 @@ document.getElementById("import-btn").addEventListener("click", async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const plansUrl = await getPlansUrl();
 
-    const granted = await ensureAppHostPermission(plansUrl);
-    if (!granted) {
-      setStatus("Permission to reach the Plans app was declined.", true);
-      button.disabled = false;
-      return;
-    }
-
     const [{ result: posts }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: extractInstagramCollectionGrid,
@@ -304,7 +314,7 @@ document.getElementById("import-btn").addEventListener("click", async () => {
     setStatus(`Asking Claude about ${posts.length} post${posts.length === 1 ? "" : "s"}…`, false);
 
     const locationId = document.getElementById("location-select").value;
-    const response = await fetch(`${plansUrl}/api/instagram-import`, {
+    const summary = await appFetch(plansUrl, "/api/instagram-import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -312,13 +322,6 @@ document.getElementById("import-btn").addEventListener("click", async () => {
         location_id: locationId && locationId !== NEW_LOCATION ? Number(locationId) : null,
       }),
     });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed (${response.status})`);
-    }
-
-    const summary = await response.json();
     const notes = [];
     if (summary.posts_already_imported) notes.push(`${summary.posts_already_imported} already imported`);
     if (summary.posts_skipped) notes.push(`${summary.posts_skipped} not a place`);
